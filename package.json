@@ -1,7 +1,7 @@
 {
-  "name": "@sgnl/job-template",
+  "name": "@sgnl-actions/aad-remove-from-group",
   "version": "1.0.0",
-  "description": "Template for SGNL JavaScript jobs",
+  "description": "Remove a user from a group in Azure Active Directory",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

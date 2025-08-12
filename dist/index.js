@@ -2,101 +2,186 @@
 'use strict';
 
 /**
- * SGNL Job Template
+ * Azure Active Directory Remove User from Group Action
  *
- * This template provides a starting point for implementing SGNL jobs.
- * Replace this implementation with your specific business logic.
+ * This action removes a user from a group in Azure Active Directory using a two-step process:
+ * 1. Get the user's directory object ID using their userPrincipalName
+ * 2. Remove the user from the group using the directory object ID
  */
+
+/**
+ * Helper function to get a user by userPrincipalName
+ * @param {string} userPrincipalName - User Principal Name (email)
+ * @param {string} tenantUrl - Azure AD tenant URL
+ * @param {string} token - Azure AD access token
+ * @returns {Promise<Response>} HTTP response
+ */
+async function getUser(userPrincipalName, tenantUrl, token) {
+  const encodedUPN = encodeURIComponent(userPrincipalName);
+  const url = new URL(`users/${encodedUPN}`, tenantUrl);
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json'
+    }
+  });
+
+  return response;
+}
+
+/**
+ * Helper function to remove a user from a group
+ * @param {string} groupId - Azure AD Group ID
+ * @param {string} userId - User's directory object ID
+ * @param {string} tenantUrl - Azure AD tenant URL
+ * @param {string} token - Azure AD access token
+ * @returns {Promise<Response>} HTTP response
+ */
+async function removeUserFromGroup(groupId, userId, tenantUrl, token) {
+  const encodedUserId = encodeURIComponent(userId);
+  const url = new URL(`groups/${groupId}/members/${encodedUserId}/$ref`, tenantUrl);
+
+  const response = await fetch(url.toString(), {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json'
+    }
+  });
+
+  return response;
+}
 
 var script = {
   /**
-   * Main execution handler - implement your job logic here
+   * Main execution handler - removes a user from an Azure AD group
    * @param {Object} params - Job input parameters
+   * @param {string} params.userPrincipalName - User Principal Name (email) to remove from group
+   * @param {string} params.groupId - Azure AD Group ID to remove user from
    * @param {Object} context - Execution context with env, secrets, outputs
    * @returns {Object} Job results
    */
   invoke: async (params, context) => {
-    console.log('Starting job execution');
-    console.log(`Processing target: ${params.target}`);
-    console.log(`Action: ${params.action}`);
+    console.log('Starting Azure AD remove user from group action');
 
-    // TODO: Replace with your implementation
-    const { target, action, options = [], dry_run = false } = params;
-
-    if (dry_run) {
-      console.log('DRY RUN: No changes will be made');
+    // Validate inputs
+    if (!params.userPrincipalName) {
+      throw new Error('userPrincipalName is required');
     }
 
-    // Access environment variables
-    const environment = context.env.ENVIRONMENT || 'development';
-    console.log(`Running in ${environment} environment`);
-
-    // Access secrets securely (example)
-    if (context.secrets.API_KEY) {
-      console.log(`Using API key ending in ...${context.secrets.API_KEY.slice(-4)}`);
+    if (!params.groupId) {
+      throw new Error('groupId is required');
     }
 
-    // Use outputs from previous jobs in workflow
-    if (context.outputs && Object.keys(context.outputs).length > 0) {
-      console.log(`Available outputs from ${Object.keys(context.outputs).length} previous jobs`);
-      console.log(`Previous job outputs: ${Object.keys(context.outputs).join(', ')}`);
+    if (!context.secrets.AZURE_AD_TOKEN) {
+      throw new Error('AZURE_AD_TOKEN secret is required');
     }
 
-    // TODO: Implement your business logic here
-    console.log(`Performing ${action} on ${target}...`);
-
-    if (options.length > 0) {
-      console.log(`Processing ${options.length} options: ${options.join(', ')}`);
+    if (!context.environment.AZURE_AD_TENANT_URL) {
+      throw new Error('AZURE_AD_TENANT_URL environment variable is required');
     }
 
-    console.log(`Successfully completed ${action} on ${target}`);
+    const { userPrincipalName, groupId } = params;
+    const token = context.secrets.AZURE_AD_TOKEN;
+    const tenantUrl = context.environment.AZURE_AD_TENANT_URL;
 
-    // Return structured results
-    return {
-      status: dry_run ? 'dry_run_completed' : 'success',
-      target: target,
-      action: action,
-      options_processed: options.length,
-      environment: environment,
-      processed_at: new Date().toISOString()
-      // Job completed successfully
-    };
+    console.log(`Removing user ${userPrincipalName} from group ${groupId}`);
+
+    // Step 1: Get user's directory object ID
+    console.log(`Step 1: Getting user directory object ID for ${userPrincipalName}`);
+    const getUserResponse = await getUser(userPrincipalName, tenantUrl, token);
+
+    if (!getUserResponse.ok) {
+      throw new Error(`Failed to get user ${userPrincipalName}: ${getUserResponse.status} ${getUserResponse.statusText}`);
+    }
+
+    const userData = await getUserResponse.json();
+    const userId = userData.id;
+
+    if (!userId) {
+      throw new Error(`No directory object ID found for user ${userPrincipalName}`);
+    }
+
+    console.log(`Found user directory object ID: ${userId}`);
+
+    // Step 2: Remove user from group
+    console.log(`Step 2: Removing user ${userId} from group ${groupId}`);
+    const removeResponse = await removeUserFromGroup(groupId, userId, tenantUrl, token);
+
+    // Handle success cases: 204 No Content or 404 Not Found (user not in group)
+    if (removeResponse.status === 204) {
+      console.log(`Successfully removed user ${userPrincipalName} from group ${groupId}`);
+      return {
+        status: 'success',
+        userPrincipalName,
+        groupId,
+        userId,
+        removed: true
+      };
+    } else if (removeResponse.status === 404) {
+      console.log(`User ${userPrincipalName} was not a member of group ${groupId}`);
+      return {
+        status: 'success',
+        userPrincipalName,
+        groupId,
+        userId,
+        removed: false
+      };
+    } else {
+      throw new Error(`Failed to remove user from group: ${removeResponse.status} ${removeResponse.statusText}`);
+    }
   },
 
   /**
-   * Error recovery handler - implement error handling logic
+   * Error recovery handler - implements retry logic for transient failures
    * @param {Object} params - Original params plus error information
    * @param {Object} context - Execution context
    * @returns {Object} Recovery results
    */
   error: async (params, _context) => {
-    const { error, target } = params;
-    console.error(`Job encountered error while processing ${target}: ${error.message}`);
+    const { error } = params;
+    console.error(`Azure AD remove from group action encountered error: ${error.message}`);
 
-    // TODO: Implement your error recovery logic
-    // Example: Check if error is retryable and attempt recovery
+    // Handle rate limiting - wait and let framework retry
+    if (error.message.includes('429')) {
+      console.log('Rate limited, waiting before retry');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return { status: 'retry_requested' };
+    }
 
-    // For now, just throw the error - implement your logic here
-    throw new Error(`Unable to recover from error: ${error.message}`);
+    // Handle transient server errors - let framework retry
+    if (error.message.includes('502') || error.message.includes('503') || error.message.includes('504')) {
+      console.log('Server error encountered, requesting retry');
+      return { status: 'retry_requested' };
+    }
+
+    // Authentication/authorization errors are fatal
+    if (error.message.includes('401') || error.message.includes('403')) {
+      console.error('Authentication/authorization error - not retryable');
+      throw error;
+    }
+
+    // Default: let framework retry
+    return { status: 'retry_requested' };
   },
 
   /**
-   * Graceful shutdown handler - implement cleanup logic
+   * Graceful shutdown handler - implements cleanup logic
    * @param {Object} params - Original params plus halt reason
    * @param {Object} context - Execution context
    * @returns {Object} Cleanup results
    */
   halt: async (params, _context) => {
-    const { reason, target } = params;
-    console.log(`Job is being halted (${reason}) while processing ${target}`);
-
-    // TODO: Implement your cleanup logic
-    // Example: Save partial results, close connections, etc.
+    const { reason, userPrincipalName, groupId } = params;
+    console.log(`Azure AD remove from group action halted (${reason}) for user ${userPrincipalName || 'unknown'} and group ${groupId || 'unknown'}`);
 
     return {
       status: 'halted',
-      target: target || 'unknown',
-      reason: reason,
+      userPrincipalName: userPrincipalName || 'unknown',
+      groupId: groupId || 'unknown',
+      reason,
       halted_at: new Date().toISOString()
     };
   }
