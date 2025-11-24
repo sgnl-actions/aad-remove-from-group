@@ -10,7 +10,7 @@ describe('Azure AD Remove from Group Script', () => {
       AZURE_AD_TENANT_URL: 'https://graph.microsoft.com/v1.0/'
     },
     secrets: {
-      AZURE_AD_TOKEN: 'test-token-123456'
+      BEARER_AUTH_TOKEN: 'test-token-123456'
     }
   };
 
@@ -193,7 +193,7 @@ describe('Azure AD Remove from Group Script', () => {
         secrets: {}
       };
 
-      await expect(script.invoke(params, contextWithoutToken)).rejects.toThrow('AZURE_AD_TOKEN secret is required');
+      await expect(script.invoke(params, contextWithoutToken)).rejects.toThrow('BEARER_AUTH_TOKEN secret is required');
     });
 
     test('should throw error if AZURE_AD_TENANT_URL environment is missing', async () => {

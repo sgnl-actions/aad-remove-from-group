@@ -23,7 +23,7 @@ This two-step approach ensures that users are correctly identified even when the
 
 The following secret must be configured:
 
-- `AZURE_AD_TOKEN`: Azure AD access token with necessary permissions
+- `BEARER_AUTH_TOKEN`: Azure AD access token with necessary permissions
 
 ### Environment Variables
 
@@ -120,7 +120,7 @@ The action implements comprehensive error handling:
 ### Input Validation Errors
 - Missing `userPrincipalName`
 - Missing `groupId`
-- Missing `AZURE_AD_TOKEN` secret
+- Missing `BEARER_AUTH_TOKEN` secret
 - Missing `AZURE_AD_TENANT_URL` environment variable
 
 ## Security Considerations

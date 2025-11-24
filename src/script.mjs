@@ -58,6 +58,7 @@ export default {
    * @param {string} params.userPrincipalName - User Principal Name (email) to remove from group
    * @param {string} params.groupId - Azure AD Group ID to remove user from
    * @param {Object} context - Execution context with env, secrets, outputs
+   * @param {string} context.secrets.BEARER_AUTH_TOKEN - Bearer token for Azure AD API authentication
    * @returns {Object} Job results
    */
   invoke: async (params, context) => {
@@ -72,8 +73,8 @@ export default {
       throw new Error('groupId is required');
     }
 
-    if (!context.secrets.AZURE_AD_TOKEN) {
-      throw new Error('AZURE_AD_TOKEN secret is required');
+    if (!context.secrets.BEARER_AUTH_TOKEN) {
+      throw new Error('BEARER_AUTH_TOKEN secret is required');
     }
 
     if (!context.environment.AZURE_AD_TENANT_URL) {
@@ -81,7 +82,7 @@ export default {
     }
 
     const { userPrincipalName, groupId } = params;
-    const token = context.secrets.AZURE_AD_TOKEN;
+    const token = context.secrets.BEARER_AUTH_TOKEN;
     const tenantUrl = context.environment.AZURE_AD_TENANT_URL;
 
     console.log(`Removing user ${userPrincipalName} from group ${groupId}`);
