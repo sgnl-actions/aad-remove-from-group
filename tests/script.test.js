@@ -7,10 +7,10 @@ global.fetch = mockFetch;
 describe('Azure AD Remove from Group Script', () => {
   const mockContext = {
     environment: {
-      AZURE_AD_TENANT_URL: 'https://graph.microsoft.com/v1.0/'
+      ADDRESS: 'https://graph.microsoft.com'
     },
     secrets: {
-      BEARER_AUTH_TOKEN: 'test-token-123456'
+      OAUTH2_AUTHORIZATION_CODE_ACCESS_TOKEN: 'test-token-123456'
     }
   };
 
@@ -193,10 +193,10 @@ describe('Azure AD Remove from Group Script', () => {
         secrets: {}
       };
 
-      await expect(script.invoke(params, contextWithoutToken)).rejects.toThrow('BEARER_AUTH_TOKEN secret is required');
+      await expect(script.invoke(params, contextWithoutToken)).rejects.toThrow('OAuth2 authentication is required');
     });
 
-    test('should throw error if AZURE_AD_TENANT_URL environment is missing', async () => {
+    test('should throw error if ADDRESS environment is missing', async () => {
       const params = {
         userPrincipalName: 'test@example.com',
         groupId: 'group-123-456-789'
@@ -207,7 +207,7 @@ describe('Azure AD Remove from Group Script', () => {
         environment: {}
       };
 
-      await expect(script.invoke(params, contextWithoutTenantUrl)).rejects.toThrow('AZURE_AD_TENANT_URL environment variable is required');
+      await expect(script.invoke(params, contextWithoutTenantUrl)).rejects.toThrow('No URL specified. Provide either address parameter or ADDRESS environment variable');
     });
 
     test('should throw error if user lookup fails', async () => {
