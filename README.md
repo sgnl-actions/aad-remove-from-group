@@ -148,8 +148,6 @@ The action implements comprehensive error handling:
 ### Input Validation Errors
 - Missing `userPrincipalName`
 - Missing `groupId`
-- Missing `BEARER_AUTH_TOKEN` secret
-- Missing `AZURE_AD_TENANT_URL` environment variable
 
 ## Security Considerations
 
