@@ -12,18 +12,21 @@
 /**
  * Helper function to get a user by userPrincipalName
  * @param {string} userPrincipalName - User Principal Name (email)
- * @param {string} tenantUrl - Azure AD tenant URL
- * @param {string} token - Azure AD access token
+ * @param {string} address - Azure AD base URL
+ * @param {string} authToken - Bearer authentication token
  * @returns {Promise<Response>} HTTP response
  */
-async function getUser(userPrincipalName, tenantUrl, token) {
-  const encodedUPN = encodeURIComponent(userPrincipalName);
-  const url = new URL(`users/${encodedUPN}`, tenantUrl);
+async function getUser(userPrincipalName, address, authToken) {
+  // Remove trailing slash from address if present
+  const cleanAddress = address.endsWith('/') ? address.slice(0, -1) : address;
 
-  const response = await fetch(url.toString(), {
+  const encodedUPN = encodeURIComponent(userPrincipalName);
+  const url = `${cleanAddress}/users/${encodedUPN}`;
+
+  const response = await fetch(url, {
     method: 'GET',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${authToken}`,
       'Accept': 'application/json'
     }
   });
@@ -35,18 +38,21 @@ async function getUser(userPrincipalName, tenantUrl, token) {
  * Helper function to remove a user from a group
  * @param {string} groupId - Azure AD Group ID
  * @param {string} userId - User's directory object ID
- * @param {string} tenantUrl - Azure AD tenant URL
- * @param {string} token - Azure AD access token
+ * @param {string} address - Azure AD base URL
+ * @param {string} authToken - Bearer authentication token
  * @returns {Promise<Response>} HTTP response
  */
-async function removeUserFromGroup(groupId, userId, tenantUrl, token) {
-  const encodedUserId = encodeURIComponent(userId);
-  const url = new URL(`groups/${groupId}/members/${encodedUserId}/$ref`, tenantUrl);
+async function removeUserFromGroup(groupId, userId, address, authToken) {
+  // Remove trailing slash from address if present
+  const cleanAddress = address.endsWith('/') ? address.slice(0, -1) : address;
 
-  const response = await fetch(url.toString(), {
+  const encodedUserId = encodeURIComponent(userId);
+  const url = `${cleanAddress}/groups/${groupId}/members/${encodedUserId}/$ref`;
+
+  const response = await fetch(url, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${authToken}`,
       'Accept': 'application/json'
     }
   });
@@ -60,7 +66,9 @@ var script = {
    * @param {Object} params - Job input parameters
    * @param {string} params.userPrincipalName - User Principal Name (email) to remove from group
    * @param {string} params.groupId - Azure AD Group ID to remove user from
+   * @param {string} params.address - The Azure AD API base URL (e.g., https://graph.microsoft.com)
    * @param {Object} context - Execution context with env, secrets, outputs
+   * @param {string} context.environment.ADDRESS - Default Azure AD API base URL
    * @param {string} context.secrets.BEARER_AUTH_TOKEN - Bearer token for Azure AD API authentication
    * @returns {Object} Job results
    */
@@ -80,19 +88,20 @@ var script = {
       throw new Error('BEARER_AUTH_TOKEN secret is required');
     }
 
-    if (!context.environment.AZURE_AD_TENANT_URL) {
-      throw new Error('AZURE_AD_TENANT_URL environment variable is required');
+    // Determine the URL to use
+    const address = params.address || context.environment?.ADDRESS;
+    if (!address) {
+      throw new Error('No URL specified. Provide either address parameter or ADDRESS environment variable');
     }
 
     const { userPrincipalName, groupId } = params;
-    const token = context.secrets.BEARER_AUTH_TOKEN;
-    const tenantUrl = context.environment.AZURE_AD_TENANT_URL;
+    const authToken = context.secrets.BEARER_AUTH_TOKEN;
 
     console.log(`Removing user ${userPrincipalName} from group ${groupId}`);
 
     // Step 1: Get user's directory object ID
     console.log(`Step 1: Getting user directory object ID for ${userPrincipalName}`);
-    const getUserResponse = await getUser(userPrincipalName, tenantUrl, token);
+    const getUserResponse = await getUser(userPrincipalName, address, authToken);
 
     if (!getUserResponse.ok) {
       throw new Error(`Failed to get user ${userPrincipalName}: ${getUserResponse.status} ${getUserResponse.statusText}`);
@@ -109,7 +118,7 @@ var script = {
 
     // Step 2: Remove user from group
     console.log(`Step 2: Removing user ${userId} from group ${groupId}`);
-    const removeResponse = await removeUserFromGroup(groupId, userId, tenantUrl, token);
+    const removeResponse = await removeUserFromGroup(groupId, userId, address, authToken);
 
     // Handle success cases: 204 No Content or 404 Not Found (user not in group)
     if (removeResponse.status === 204) {
