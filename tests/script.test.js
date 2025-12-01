@@ -62,7 +62,8 @@ describe('Azure AD Remove from Group Script', () => {
           method: 'GET',
           headers: {
             'Authorization': 'Bearer test-token-123456',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
           }
         }
       );
@@ -74,7 +75,8 @@ describe('Azure AD Remove from Group Script', () => {
           method: 'DELETE',
           headers: {
             'Authorization': 'Bearer test-token-123456',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
           }
         }
       );
@@ -193,7 +195,7 @@ describe('Azure AD Remove from Group Script', () => {
         secrets: {}
       };
 
-      await expect(script.invoke(params, contextWithoutToken)).rejects.toThrow('OAuth2 authentication is required');
+      await expect(script.invoke(params, contextWithoutToken)).rejects.toThrow('No authentication configured');
     });
 
     test('should throw error if ADDRESS environment is missing', async () => {
@@ -207,7 +209,7 @@ describe('Azure AD Remove from Group Script', () => {
         environment: {}
       };
 
-      await expect(script.invoke(params, contextWithoutTenantUrl)).rejects.toThrow('No URL specified. Provide either address parameter or ADDRESS environment variable');
+      await expect(script.invoke(params, contextWithoutTenantUrl)).rejects.toThrow('No URL specified. Provide address parameter or ADDRESS environment variable');
     });
 
     test('should throw error if user lookup fails', async () => {
