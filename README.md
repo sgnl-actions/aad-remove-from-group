@@ -19,20 +19,38 @@ This two-step approach ensures that users are correctly identified even when the
 
 ## Configuration
 
-### Secrets
+### Authentication
 
-The following secret must be configured:
+This action supports two OAuth2 authentication methods:
 
-- `AZURE_AD_TOKEN`: Azure AD access token with necessary permissions
+#### OAuth2 Authorization Code Flow
 
-### Environment Variables
+**Required Secrets:**
+- **`OAUTH2_AUTHORIZATION_CODE_ACCESS_TOKEN`**: OAuth2 access token
 
-- `AZURE_AD_TENANT_URL`: Azure AD tenant URL (e.g., `https://graph.microsoft.com/v1.0`)
+#### OAuth2 Client Credentials Flow
+
+**Required Secrets:**
+- **`OAUTH2_CLIENT_CREDENTIALS_CLIENT_SECRET`**: OAuth2 client secret
+
+**Required Environment Variables:**
+- **`OAUTH2_CLIENT_CREDENTIALS_TOKEN_URL`**: Token endpoint URL
+- **`OAUTH2_CLIENT_CREDENTIALS_CLIENT_ID`**: OAuth2 client ID
+
+**Optional Environment Variables:**
+- **`OAUTH2_CLIENT_CREDENTIALS_AUTH_STYLE`**: Authentication style (`InHeader`, `InParams`, or `AutoDetect`)
+- **`OAUTH2_CLIENT_CREDENTIALS_SCOPE`**: OAuth2 scope
+- **`OAUTH2_CLIENT_CREDENTIALS_AUDIENCE`**: OAuth2 audience
+
+### Required Environment Variables
+
+- **`ADDRESS`**: Azure AD API base URL (e.g., `https://graph.microsoft.com`)
 
 ### Input Parameters
 
-- `userPrincipalName` (required): User Principal Name (email) of the user to remove from the group
-- `groupId` (required): Azure AD Group ID to remove the user from
+- **`userPrincipalName`** (required): User Principal Name (email) of the user to remove from the group
+- **`groupId`** (required): Azure AD Group ID to remove the user from
+- **`address`** (optional): The Azure AD API base URL (overrides `ADDRESS` environment variable)
 
 ### Output Parameters
 
@@ -88,6 +106,45 @@ The action handles userPrincipalNames with special characters correctly:
 }
 ```
 
+### With OAuth2 Client Credentials
+
+```json
+{
+  "script_inputs": {
+    "userPrincipalName": "john.doe@company.com",
+    "groupId": "12345678-1234-1234-1234-123456789abc",
+    "address": "https://graph.microsoft.com"
+  },
+  "environment": {
+    "ADDRESS": "https://graph.microsoft.com",
+    "OAUTH2_CLIENT_CREDENTIALS_TOKEN_URL": "https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/token",
+    "OAUTH2_CLIENT_CREDENTIALS_CLIENT_ID": "your-client-id",
+    "OAUTH2_CLIENT_CREDENTIALS_SCOPE": "https://graph.microsoft.com/.default"
+  },
+  "secrets": {
+    "OAUTH2_CLIENT_CREDENTIALS_CLIENT_SECRET": "your-client-secret"
+  }
+}
+```
+
+### With OAuth2 Authorization Code
+
+```json
+{
+  "script_inputs": {
+    "userPrincipalName": "john.doe@company.com",
+    "groupId": "12345678-1234-1234-1234-123456789abc",
+    "address": "https://graph.microsoft.com"
+  },
+  "environment": {
+    "ADDRESS": "https://graph.microsoft.com"
+  },
+  "secrets": {
+    "OAUTH2_AUTHORIZATION_CODE_ACCESS_TOKEN": "your-access-token"
+  }
+}
+```
+
 ## API Endpoints
 
 The action makes the following Microsoft Graph API calls:
@@ -120,8 +177,6 @@ The action implements comprehensive error handling:
 ### Input Validation Errors
 - Missing `userPrincipalName`
 - Missing `groupId`
-- Missing `AZURE_AD_TOKEN` secret
-- Missing `AZURE_AD_TENANT_URL` environment variable
 
 ## Security Considerations
 
@@ -183,15 +238,22 @@ npm run test:coverage  # Must achieve 80%+ coverage
     "name": "remove-user-from-group",
     "type": "nodejs-22",
     "script": {
-      "repository": "github.com/sgnl-actions/aad-remove-from-group@v1.0.0",
+      "repository": "github.com/sgnl-actions/aad-remove-from-group@main",
       "type": "nodejs"
     },
     "script_inputs": {
       "userPrincipalName": "user@company.com",
-      "groupId": "12345678-1234-1234-1234-123456789abc"
+      "groupId": "12345678-1234-1234-1234-123456789abc",
+      "address": "https://graph.microsoft.com"
     },
     "environment": {
-      "AZURE_AD_TENANT_URL": "https://graph.microsoft.com/v1.0"
+      "ADDRESS": "https://graph.microsoft.com",
+      "OAUTH2_CLIENT_CREDENTIALS_TOKEN_URL": "https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/token",
+      "OAUTH2_CLIENT_CREDENTIALS_CLIENT_ID": "your-client-id",
+      "OAUTH2_CLIENT_CREDENTIALS_SCOPE": "https://graph.microsoft.com/.default"
+    },
+    "secrets": {
+      "OAUTH2_CLIENT_CREDENTIALS_CLIENT_SECRET": "your-client-secret"
     }
   }
 }

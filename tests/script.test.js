@@ -7,10 +7,10 @@ global.fetch = mockFetch;
 describe('Azure AD Remove from Group Script', () => {
   const mockContext = {
     environment: {
-      AZURE_AD_TENANT_URL: 'https://graph.microsoft.com/v1.0/'
+      ADDRESS: 'https://graph.microsoft.com'
     },
     secrets: {
-      AZURE_AD_TOKEN: 'test-token-123456'
+      OAUTH2_AUTHORIZATION_CODE_ACCESS_TOKEN: 'test-token-123456'
     }
   };
 
@@ -62,7 +62,8 @@ describe('Azure AD Remove from Group Script', () => {
           method: 'GET',
           headers: {
             'Authorization': 'Bearer test-token-123456',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
           }
         }
       );
@@ -74,7 +75,8 @@ describe('Azure AD Remove from Group Script', () => {
           method: 'DELETE',
           headers: {
             'Authorization': 'Bearer test-token-123456',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
           }
         }
       );
@@ -193,10 +195,10 @@ describe('Azure AD Remove from Group Script', () => {
         secrets: {}
       };
 
-      await expect(script.invoke(params, contextWithoutToken)).rejects.toThrow('AZURE_AD_TOKEN secret is required');
+      await expect(script.invoke(params, contextWithoutToken)).rejects.toThrow('No authentication configured');
     });
 
-    test('should throw error if AZURE_AD_TENANT_URL environment is missing', async () => {
+    test('should throw error if ADDRESS environment is missing', async () => {
       const params = {
         userPrincipalName: 'test@example.com',
         groupId: 'group-123-456-789'
@@ -207,7 +209,7 @@ describe('Azure AD Remove from Group Script', () => {
         environment: {}
       };
 
-      await expect(script.invoke(params, contextWithoutTenantUrl)).rejects.toThrow('AZURE_AD_TENANT_URL environment variable is required');
+      await expect(script.invoke(params, contextWithoutTenantUrl)).rejects.toThrow('No URL specified. Provide address parameter or ADDRESS environment variable');
     });
 
     test('should throw error if user lookup fails', async () => {
@@ -265,82 +267,51 @@ describe('Azure AD Remove from Group Script', () => {
   });
 
   describe('error handler', () => {
-    test('should handle rate limiting (429) with retry request', async () => {
+    test('should re-throw error and let framework handle retries', async () => {
+      const errorObj = new Error('Rate limited: 429');
       const params = {
-        error: { message: 'Rate limited: 429' },
+        error: errorObj,
         userPrincipalName: 'test@example.com',
         groupId: 'group-123-456-789'
       };
 
-      // Mock setTimeout to resolve immediately for testing
-      jest.spyOn(global, 'setTimeout').mockImplementation((fn) => fn());
-
-      const result = await script.error(params, mockContext);
-
-      expect(result.status).toBe('retry_requested');
-      expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 5000);
-
-      setTimeout.mockRestore();
+      await expect(script.error(params, mockContext)).rejects.toThrow(errorObj);
+      expect(console.error).toHaveBeenCalledWith(
+        'User group removal failed for user test@example.com from group group-123-456-789: Rate limited: 429'
+      );
     });
 
-    test('should handle server errors (502, 503, 504) with retry request', async () => {
-      const serverErrors = ['502', '503', '504'];
-
-      for (const errorCode of serverErrors) {
-        const params = {
-          error: { message: `Server error: ${errorCode}` },
-          userPrincipalName: 'test@example.com',
-          groupId: 'group-123-456-789'
-        };
-
-        const result = await script.error(params, mockContext);
-        expect(result.status).toBe('retry_requested');
-      }
-    });
-
-    test('should throw error for authentication failures (401, 403)', async () => {
-      // Test 401 error
-      const params401 = {
-        error: { message: 'Auth error: 401' },
-        userPrincipalName: 'test@example.com',
-        groupId: 'group-123-456-789'
-      };
-
-      let thrown401 = false;
-      try {
-        await script.error(params401, mockContext);
-      } catch (error) {
-        thrown401 = true;
-        expect(error.message).toContain('Auth error: 401');
-      }
-      expect(thrown401).toBe(true);
-
-      // Test 403 error
-      const params403 = {
-        error: { message: 'Auth error: 403' },
-        userPrincipalName: 'test@example.com',
-        groupId: 'group-123-456-789'
-      };
-
-      let thrown403 = false;
-      try {
-        await script.error(params403, mockContext);
-      } catch (error) {
-        thrown403 = true;
-        expect(error.message).toContain('Auth error: 403');
-      }
-      expect(thrown403).toBe(true);
-    });
-
-    test('should request retry for other errors', async () => {
+    test('should re-throw server errors', async () => {
+      const errorObj = new Error('Server error: 502');
       const params = {
-        error: { message: 'Some other error' },
+        error: errorObj,
         userPrincipalName: 'test@example.com',
         groupId: 'group-123-456-789'
       };
 
-      const result = await script.error(params, mockContext);
-      expect(result.status).toBe('retry_requested');
+      await expect(script.error(params, mockContext)).rejects.toThrow(errorObj);
+    });
+
+    test('should re-throw authentication errors', async () => {
+      const errorObj = new Error('Auth error: 401');
+      const params = {
+        error: errorObj,
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123-456-789'
+      };
+
+      await expect(script.error(params, mockContext)).rejects.toThrow(errorObj);
+    });
+
+    test('should re-throw any error', async () => {
+      const errorObj = new Error('Some other error');
+      const params = {
+        error: errorObj,
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123-456-789'
+      };
+
+      await expect(script.error(params, mockContext)).rejects.toThrow(errorObj);
     });
   });
 
