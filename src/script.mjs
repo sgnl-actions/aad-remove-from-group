@@ -135,36 +135,19 @@ export default {
   },
 
   /**
-   * Error recovery handler - implements retry logic for transient failures
+   * Error recovery handler - framework handles retries by default
+   * Only implement if custom recovery logic is needed
    * @param {Object} params - Original params plus error information
    * @param {Object} context - Execution context
    * @returns {Object} Recovery results
    */
   error: async (params, _context) => {
-    const { error } = params;
-    console.error(`Azure AD remove from group action encountered error: ${error.message}`);
+    const { error, userPrincipalName, groupId } = params;
+    console.error(`User group removal failed for user ${userPrincipalName} from group ${groupId}: ${error.message}`);
 
-    // Handle rate limiting - wait and let framework retry
-    if (error.message.includes('429')) {
-      console.log('Rate limited, waiting before retry');
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      return { status: 'retry_requested' };
-    }
-
-    // Handle transient server errors - let framework retry
-    if (error.message.includes('502') || error.message.includes('503') || error.message.includes('504')) {
-      console.log('Server error encountered, requesting retry');
-      return { status: 'retry_requested' };
-    }
-
-    // Authentication/authorization errors are fatal
-    if (error.message.includes('401') || error.message.includes('403')) {
-      console.error('Authentication/authorization error - not retryable');
-      throw error;
-    }
-
-    // Default: let framework retry
-    return { status: 'retry_requested' };
+    // Framework handles retries for transient errors (429, 502, 503, 504)
+    // Just re-throw the error to let the framework handle it
+    throw error;
   },
 
   /**

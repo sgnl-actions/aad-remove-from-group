@@ -267,82 +267,51 @@ describe('Azure AD Remove from Group Script', () => {
   });
 
   describe('error handler', () => {
-    test('should handle rate limiting (429) with retry request', async () => {
+    test('should re-throw error and let framework handle retries', async () => {
+      const errorObj = new Error('Rate limited: 429');
       const params = {
-        error: { message: 'Rate limited: 429' },
+        error: errorObj,
         userPrincipalName: 'test@example.com',
         groupId: 'group-123-456-789'
       };
 
-      // Mock setTimeout to resolve immediately for testing
-      jest.spyOn(global, 'setTimeout').mockImplementation((fn) => fn());
-
-      const result = await script.error(params, mockContext);
-
-      expect(result.status).toBe('retry_requested');
-      expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 5000);
-
-      setTimeout.mockRestore();
+      await expect(script.error(params, mockContext)).rejects.toThrow(errorObj);
+      expect(console.error).toHaveBeenCalledWith(
+        'User group removal failed for user test@example.com from group group-123-456-789: Rate limited: 429'
+      );
     });
 
-    test('should handle server errors (502, 503, 504) with retry request', async () => {
-      const serverErrors = ['502', '503', '504'];
-
-      for (const errorCode of serverErrors) {
-        const params = {
-          error: { message: `Server error: ${errorCode}` },
-          userPrincipalName: 'test@example.com',
-          groupId: 'group-123-456-789'
-        };
-
-        const result = await script.error(params, mockContext);
-        expect(result.status).toBe('retry_requested');
-      }
-    });
-
-    test('should throw error for authentication failures (401, 403)', async () => {
-      // Test 401 error
-      const params401 = {
-        error: { message: 'Auth error: 401' },
-        userPrincipalName: 'test@example.com',
-        groupId: 'group-123-456-789'
-      };
-
-      let thrown401 = false;
-      try {
-        await script.error(params401, mockContext);
-      } catch (error) {
-        thrown401 = true;
-        expect(error.message).toContain('Auth error: 401');
-      }
-      expect(thrown401).toBe(true);
-
-      // Test 403 error
-      const params403 = {
-        error: { message: 'Auth error: 403' },
-        userPrincipalName: 'test@example.com',
-        groupId: 'group-123-456-789'
-      };
-
-      let thrown403 = false;
-      try {
-        await script.error(params403, mockContext);
-      } catch (error) {
-        thrown403 = true;
-        expect(error.message).toContain('Auth error: 403');
-      }
-      expect(thrown403).toBe(true);
-    });
-
-    test('should request retry for other errors', async () => {
+    test('should re-throw server errors', async () => {
+      const errorObj = new Error('Server error: 502');
       const params = {
-        error: { message: 'Some other error' },
+        error: errorObj,
         userPrincipalName: 'test@example.com',
         groupId: 'group-123-456-789'
       };
 
-      const result = await script.error(params, mockContext);
-      expect(result.status).toBe('retry_requested');
+      await expect(script.error(params, mockContext)).rejects.toThrow(errorObj);
+    });
+
+    test('should re-throw authentication errors', async () => {
+      const errorObj = new Error('Auth error: 401');
+      const params = {
+        error: errorObj,
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123-456-789'
+      };
+
+      await expect(script.error(params, mockContext)).rejects.toThrow(errorObj);
+    });
+
+    test('should re-throw any error', async () => {
+      const errorObj = new Error('Some other error');
+      const params = {
+        error: errorObj,
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123-456-789'
+      };
+
+      await expect(script.error(params, mockContext)).rejects.toThrow(errorObj);
     });
   });
 
