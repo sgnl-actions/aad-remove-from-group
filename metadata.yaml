@@ -19,17 +19,13 @@ inputs:
       min: 36
       max: 36
 
-# Secrets required for authentication
-secrets:
-  AZURE_AD_TOKEN:
-    description: Azure AD access token with necessary permissions to modify group membership
-    required: true
-
-# Environment variables
-environment:
-  AZURE_AD_TENANT_URL:
-    description: Azure AD tenant URL (e.g., https://graph.microsoft.com/v1.0)
-    required: true
+  address:
+    type: text
+    description: Optional Azure AD API base URL override
+    required: false
+    validation:
+      min: 1
+      max: 100
 
 # Expected output structure
 outputs:
@@ -52,3 +48,7 @@ outputs:
   userId:
     type: text
     description: The Azure AD object ID of the user
+
+  address:
+    type: text
+    description: The Azure AD API base URL used

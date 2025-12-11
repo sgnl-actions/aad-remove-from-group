@@ -80,15 +80,6 @@ export default {
       console.warn('Template resolution errors:', errors);
     }
 
-    // Validate inputs
-    if (!resolvedParams.userPrincipalName) {
-      throw new Error('userPrincipalName is required');
-    }
-
-    if (!resolvedParams.groupId) {
-      throw new Error('groupId is required');
-    }
-
     // Get base URL and authentication headers using utilities
     const baseUrl = getBaseURL(resolvedParams, context);
     const headers = await createAuthHeaders(context);
@@ -126,7 +117,8 @@ export default {
         userPrincipalName,
         groupId,
         userId,
-        removed: true
+        removed: true,
+        address: baseUrl
       };
     } else if (removeResponse.status === 404) {
       console.log(`User ${userPrincipalName} was not a member of group ${groupId}`);
@@ -135,7 +127,8 @@ export default {
         userPrincipalName,
         groupId,
         userId,
-        removed: false
+        removed: false,
+        address: baseUrl
       };
     } else {
       throw new Error(`Failed to remove user from group: ${removeResponse.status} ${removeResponse.statusText}`);
