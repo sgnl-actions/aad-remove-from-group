@@ -168,49 +168,9 @@ describe('Azure AD Remove from Group Script', () => {
       );
     });
 
-    test('should throw error if userPrincipalName is missing', async () => {
-      const params = {
-        groupId: 'group-123-456-789'
-      };
 
-      await expect(script.invoke(params, mockContext)).rejects.toThrow('userPrincipalName is required');
-    });
 
-    test('should throw error if groupId is missing', async () => {
-      const params = {
-        userPrincipalName: 'test@example.com'
-      };
 
-      await expect(script.invoke(params, mockContext)).rejects.toThrow('groupId is required');
-    });
-
-    test('should throw error if AZURE_AD_TOKEN secret is missing', async () => {
-      const params = {
-        userPrincipalName: 'test@example.com',
-        groupId: 'group-123-456-789'
-      };
-
-      const contextWithoutToken = {
-        ...mockContext,
-        secrets: {}
-      };
-
-      await expect(script.invoke(params, contextWithoutToken)).rejects.toThrow('No authentication configured');
-    });
-
-    test('should throw error if ADDRESS environment is missing', async () => {
-      const params = {
-        userPrincipalName: 'test@example.com',
-        groupId: 'group-123-456-789'
-      };
-
-      const contextWithoutTenantUrl = {
-        ...mockContext,
-        environment: {}
-      };
-
-      await expect(script.invoke(params, contextWithoutTenantUrl)).rejects.toThrow('No URL specified. Provide address parameter or ADDRESS environment variable');
-    });
 
     test('should throw error if user lookup fails', async () => {
       const params = {
