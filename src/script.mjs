@@ -6,7 +6,7 @@
  * 2. Remove the user from the group using the directory object ID
  */
 
-import { getBaseURL, createAuthHeaders, resolveJSONPathTemplates} from '@sgnl-actions/utils';
+import { getBaseURL, createAuthHeaders} from '@sgnl-actions/utils';
 
 /**
  * Helper function to get a user by userPrincipalName
@@ -72,19 +72,11 @@ export default {
   invoke: async (params, context) => {
     console.log('Starting Azure AD remove user from group action');
 
-    const jobContext = context.data || {};
-
-    // Resolve JSONPath templates in params
-    const { result: resolvedParams, errors } = resolveJSONPathTemplates(params, jobContext);
-    if (errors.length > 0) {
-      console.warn('Template resolution errors:', errors);
-    }
-
     // Get base URL and authentication headers using utilities
-    const baseUrl = getBaseURL(resolvedParams, context);
+    const baseUrl = getBaseURL(params, context);
     const headers = await createAuthHeaders(context);
 
-    const { userPrincipalName, groupId } = resolvedParams;
+    const { userPrincipalName, groupId } = params;
 
     console.log(`Removing user ${userPrincipalName} from group ${groupId}`);
 
