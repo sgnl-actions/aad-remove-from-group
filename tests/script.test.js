@@ -1,4 +1,5 @@
 import script from '../src/script.mjs';
+import { SGNL_USER_AGENT } from '@sgnl-actions/utils';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -63,7 +64,8 @@ describe('Azure AD Remove from Group Script', () => {
           headers: {
             'Authorization': 'Bearer test-token-123456',
             'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            "User-Agent": SGNL_USER_AGENT,
           }
         }
       );
@@ -76,7 +78,8 @@ describe('Azure AD Remove from Group Script', () => {
           headers: {
             'Authorization': 'Bearer test-token-123456',
             'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            "User-Agent": SGNL_USER_AGENT,
           }
         }
       );
