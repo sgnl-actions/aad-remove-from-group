@@ -6,7 +6,7 @@
  * 2. Remove the user from the group using the directory object ID
  */
 
-import { getBaseURL, createAuthHeaders} from '@sgnl-actions/utils';
+import { getBaseURL, createAuthHeaders } from '@sgnl-actions/utils';
 
 /**
  * Helper function to get a user by userPrincipalName
