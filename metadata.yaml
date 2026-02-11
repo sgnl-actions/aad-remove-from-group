@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/sgnl-actions/schemas/main/metadata.schema.json
 name: aad-remove-from-group
 description: Remove a user from a group in Azure Active Directory
 
