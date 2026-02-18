@@ -65,7 +65,7 @@ describe('Azure AD Remove from Group Script', () => {
             'Authorization': 'Bearer test-token-123456',
             'Accept': 'application/json',
             'Content-Type': 'application/json',
-            "User-Agent": SGNL_USER_AGENT,
+            'User-Agent': SGNL_USER_AGENT
           }
         }
       );
@@ -79,7 +79,7 @@ describe('Azure AD Remove from Group Script', () => {
             'Authorization': 'Bearer test-token-123456',
             'Accept': 'application/json',
             'Content-Type': 'application/json',
-            "User-Agent": SGNL_USER_AGENT,
+            'User-Agent': SGNL_USER_AGENT
           }
         }
       );
