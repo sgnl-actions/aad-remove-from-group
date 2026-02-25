@@ -1,0 +1,132 @@
+# Azure AD Remove User from Group Test Scenarios
+action:
+  params:
+    userPrincipalName: testuser@yourtenant.onmicrosoft.com
+    groupId: 12345678-1234-1234-1234-123456789012
+  context:
+    secrets:
+      OAUTH2_CLIENT_CREDENTIALS_CLIENT_SECRET: test-client-secret
+    environment:
+      ADDRESS: https://graph.microsoft.com
+      OAUTH2_CLIENT_CREDENTIALS_TOKEN_URL: https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token
+      OAUTH2_CLIENT_CREDENTIALS_CLIENT_ID: test-client-id
+      OAUTH2_CLIENT_CREDENTIALS_SCOPE: https://graph.microsoft.com/.default
+
+scenarios:
+  - name: successfully remove user from group
+    steps:
+      - request:
+          method: POST
+          url: https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token
+          headers:
+            Content-Type: application/x-www-form-urlencoded
+        fixture: fixtures/200-oauth-token.http
+      - request:
+          method: GET
+          url: https://graph.microsoft.com/v1.0/users/testuser%40yourtenant.onmicrosoft.com
+        fixture: fixtures/200-user-lookup.http
+      - request:
+          method: DELETE
+          url: https://graph.microsoft.com/v1.0/groups/12345678-1234-1234-1234-123456789012/members/12345678-1234-1234-1234-123456789012/$ref
+        fixture: fixtures/204-no-content.http
+    invoke:
+      returns:
+        status: success
+        userPrincipalName: testuser@yourtenant.onmicrosoft.com
+        groupId: 12345678-1234-1234-1234-123456789012
+        userId: 12345678-1234-1234-1234-123456789012
+        removed: true
+        address: https://graph.microsoft.com
+
+  - name: idempotent - second call succeeds when user not in group
+    steps:
+      - request:
+          method: POST
+          url: https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token
+          headers:
+            Content-Type: application/x-www-form-urlencoded
+        fixture: fixtures/200-oauth-token.http
+      - request:
+          method: GET
+          url: https://graph.microsoft.com/v1.0/users/testuser%40yourtenant.onmicrosoft.com
+        fixture: fixtures/200-user-lookup.http
+      - request:
+          method: DELETE
+          url: https://graph.microsoft.com/v1.0/groups/12345678-1234-1234-1234-123456789012/members/12345678-1234-1234-1234-123456789012/$ref
+        fixture: fixtures/404-not-member.http
+    invoke:
+      returns:
+        status: success
+        userPrincipalName: testuser@yourtenant.onmicrosoft.com
+        groupId: 12345678-1234-1234-1234-123456789012
+        userId: 12345678-1234-1234-1234-123456789012
+        removed: false
+        address: https://graph.microsoft.com
+
+  - name: user not found in directory
+    steps:
+      - request:
+          method: POST
+          url: https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token
+          headers:
+            Content-Type: application/x-www-form-urlencoded
+        fixture: fixtures/200-oauth-token.http
+      - request:
+          method: GET
+          url: https://graph.microsoft.com/v1.0/users/testuser%40yourtenant.onmicrosoft.com
+        fixture: fixtures/404-user-not-found.http
+    invoke:
+      throws: "Failed to get user testuser@yourtenant.onmicrosoft.com"
+
+  - name: unauthorized - invalid token
+    steps:
+      - request:
+          method: POST
+          url: https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token
+          headers:
+            Content-Type: application/x-www-form-urlencoded
+        fixture: fixtures/200-oauth-token.http
+      - request:
+          method: GET
+          url: https://graph.microsoft.com/v1.0/users/testuser%40yourtenant.onmicrosoft.com
+        fixture: fixtures/401-unauthorized.http
+    invoke:
+      throws: "Failed to get user testuser@yourtenant.onmicrosoft.com"
+
+  - name: insufficient permissions on group removal
+    steps:
+      - request:
+          method: POST
+          url: https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token
+          headers:
+            Content-Type: application/x-www-form-urlencoded
+        fixture: fixtures/200-oauth-token.http
+      - request:
+          method: GET
+          url: https://graph.microsoft.com/v1.0/users/testuser%40yourtenant.onmicrosoft.com
+        fixture: fixtures/200-user-lookup.http
+      - request:
+          method: DELETE
+          url: https://graph.microsoft.com/v1.0/groups/12345678-1234-1234-1234-123456789012/members/12345678-1234-1234-1234-123456789012/$ref
+        fixture: fixtures/403-forbidden.http
+    invoke:
+      throws: "Failed to remove user from group"
+
+  - name: server error on group removal
+    steps:
+      - request:
+          method: POST
+          url: https://login.microsoftonline.com/test-tenant/oauth2/v2.0/token
+          headers:
+            Content-Type: application/x-www-form-urlencoded
+        fixture: fixtures/200-oauth-token.http
+      - request:
+          method: GET
+          url: https://graph.microsoft.com/v1.0/users/testuser%40yourtenant.onmicrosoft.com
+        fixture: fixtures/200-user-lookup.http
+      - request:
+          method: DELETE
+          url: https://graph.microsoft.com/v1.0/groups/12345678-1234-1234-1234-123456789012/members/12345678-1234-1234-1234-123456789012/$ref
+        fixture: fixtures/500-internal-server.http
+    invoke:
+      throws: "Failed to remove user from group"
