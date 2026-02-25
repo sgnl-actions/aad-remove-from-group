@@ -7,6 +7,5 @@ export default {
     '**/tests/**/*.test.mjs'
   ],
   moduleFileExtensions: ['js', 'mjs', 'json'],
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   clearMocks: true
 };
