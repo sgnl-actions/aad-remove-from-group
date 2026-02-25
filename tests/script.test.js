@@ -65,7 +65,7 @@ describe('Azure AD Remove from Group Script', () => {
             'Authorization': 'Bearer test-token-123456',
             'Accept': 'application/json',
             'Content-Type': 'application/json',
-            "User-Agent": SGNL_USER_AGENT,
+            'User-Agent': SGNL_USER_AGENT
           }
         }
       );
@@ -79,7 +79,7 @@ describe('Azure AD Remove from Group Script', () => {
             'Authorization': 'Bearer test-token-123456',
             'Accept': 'application/json',
             'Content-Type': 'application/json',
-            "User-Agent": SGNL_USER_AGENT,
+            'User-Agent': SGNL_USER_AGENT
           }
         }
       );
@@ -306,6 +306,251 @@ describe('Azure AD Remove from Group Script', () => {
       expect(result.userPrincipalName).toBe('unknown');
       expect(result.groupId).toBe('unknown');
       expect(result.reason).toBe('system_shutdown');
+    });
+  });
+
+  describe('invoke handler - idempotency', () => {
+    test('should succeed on first call with removed:true', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: false, status: 204 });
+
+      const result = await script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext);
+
+      expect(result.status).toBe('success');
+      expect(result.removed).toBe(true);
+    });
+
+    test('should succeed on second call with removed:false (404 - user not in group)', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: false, status: 404 });
+
+      const result = await script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext);
+
+      expect(result.status).toBe('success');
+      expect(result.removed).toBe(false);
+    });
+
+    // Documents real Azure behavior: returns 400 with "modified properties: 'members'"
+    // when removing a user who is not in the group
+    test('should succeed on second call with removed:false (real Azure 400 response)', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          statusText: 'Bad Request',
+          text: async () => JSON.stringify({
+            error: {
+              code: 'Request_BadRequest',
+              message: "One or more removed object references do not exist for the following modified properties: 'members'."
+            }
+          })
+        });
+
+      const result = await script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext);
+
+      expect(result.status).toBe('success');
+      expect(result.removed).toBe(false);
+    });
+
+    test('should produce same end state on repeated calls', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: true, status: 204 })
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: false, status: 404 });
+
+      const r1 = await script.invoke({ userPrincipalName: 'test@example.com', groupId: 'group-123' }, mockContext);
+      const r2 = await script.invoke({ userPrincipalName: 'test@example.com', groupId: 'group-123' }, mockContext);
+
+      expect(r1.status).toBe('success');
+      expect(r2.status).toBe('success');
+      expect(r1.userPrincipalName).toBe(r2.userPrincipalName);
+      expect(r1.groupId).toBe(r2.groupId);
+      expect(r1.userId).toBe(r2.userId);
+    });
+  });
+
+  describe('invoke handler - input validation', () => {
+    test('should throw when userPrincipalName is missing', async () => {
+      await expect(script.invoke({
+        groupId: 'group-123'
+      }, mockContext)).rejects.toThrow('userPrincipalName parameter is required and cannot be empty');
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    test('should throw when groupId is missing', async () => {
+      await expect(script.invoke({
+        userPrincipalName: 'test@example.com'
+      }, mockContext)).rejects.toThrow('groupId parameter is required and cannot be empty');
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    test('should throw when auth token is missing', async () => {
+      await expect(script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, { environment: { ADDRESS: 'https://graph.microsoft.com' }, secrets: {} }))
+        .rejects.toThrow(/No authentication configured/);
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('invoke handler - request construction', () => {
+    test('should include User-Agent header in both API calls', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: true, status: 204 });
+
+      await script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext);
+
+      for (const call of mockFetch.mock.calls) {
+        expect(call[1].headers['User-Agent']).toBe(SGNL_USER_AGENT);
+      }
+    });
+
+    test('should use custom address from params over environment ADDRESS', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: true, status: 204 });
+
+      await script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123',
+        address: 'https://custom-proxy.example.com'
+      }, mockContext);
+
+      expect(mockFetch).toHaveBeenNthCalledWith(1,
+        expect.stringContaining('https://custom-proxy.example.com'),
+        expect.any(Object)
+      );
+    });
+
+    test('should use DELETE method for group removal', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: true, status: 204 });
+
+      await script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext);
+
+      expect(mockFetch).toHaveBeenNthCalledWith(2,
+        expect.any(String),
+        expect.objectContaining({ method: 'DELETE' })
+      );
+    });
+
+    test('should use GET method for user lookup', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: true, status: 204 });
+
+      await script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext);
+
+      expect(mockFetch).toHaveBeenNthCalledWith(1,
+        expect.any(String),
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+  });
+
+  describe('invoke handler - network failures', () => {
+    test('should throw when fetch rejects during user lookup', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network timeout'));
+
+      await expect(script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext)).rejects.toThrow('Network timeout');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    test('should throw when fetch rejects during group removal', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockRejectedValueOnce(new Error('Connection refused'));
+
+      await expect(script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext)).rejects.toThrow('Connection refused');
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('invoke handler - error responses', () => {
+    test('should throw on 401 during user lookup', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false, status: 401, statusText: 'Unauthorized'
+      });
+
+      await expect(script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext)).rejects.toThrow(/401 Unauthorized/);
+    });
+
+    test('should throw on 403 during group removal', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden' });
+
+      await expect(script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext)).rejects.toThrow(/403 Forbidden/);
+    });
+
+    test('should throw on 500 during group removal', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => mockUserData })
+        .mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Internal Server Error' });
+
+      await expect(script.invoke({
+        userPrincipalName: 'test@example.com',
+        groupId: 'group-123'
+      }, mockContext)).rejects.toThrow(/500 Internal Server Error/);
+    });
+  });
+
+  describe('halt handler - edge cases', () => {
+    test('should handle halt with no params at all', async () => {
+      const result = await script.halt({}, mockContext);
+
+      expect(result.status).toBe('halted');
+      expect(result.userPrincipalName).toBe('unknown');
+      expect(result.groupId).toBe('unknown');
+      expect(result.reason).toBeUndefined();
+      expect(result.halted_at).toBeDefined();
+    });
+
+    test('should include ISO timestamp in halted_at', async () => {
+      const result = await script.halt({ reason: 'test' }, mockContext);
+      expect(new Date(result.halted_at).toISOString()).toBe(result.halted_at);
     });
   });
 });

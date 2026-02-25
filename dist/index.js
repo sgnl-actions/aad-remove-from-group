@@ -251,11 +251,19 @@ var script = {
   invoke: async (params, context) => {
     console.log('Starting Azure AD remove user from group action');
 
+    const { userPrincipalName, groupId } = params;
+
+    if (!userPrincipalName || typeof userPrincipalName !== 'string' || !userPrincipalName.trim()) {
+      throw new Error('userPrincipalName parameter is required and cannot be empty');
+    }
+
+    if (!groupId || typeof groupId !== 'string' || !groupId.trim()) {
+      throw new Error('groupId parameter is required and cannot be empty');
+    }
+
     // Get base URL and authentication headers using utilities
     const baseUrl = getBaseURL(params, context);
     const headers = await createAuthHeaders(context);
-
-    const { userPrincipalName, groupId } = params;
 
     console.log(`Removing user ${userPrincipalName} from group ${groupId}`);
 
@@ -280,7 +288,10 @@ var script = {
     console.log(`Step 2: Removing user ${userId} from group ${groupId}`);
     const removeResponse = await removeUserFromGroup(groupId, userId, baseUrl, headers);
 
-    // Handle success cases: 204 No Content or 404 Not Found (user not in group)
+    // Handle success cases:
+    // 204 No Content — user successfully removed
+    // 404 Not Found — user was not in group (documented Azure behavior)
+    // 400 Bad Request with "not a member" — actual Azure behavior when user not in group
     if (removeResponse.status === 204) {
       console.log(`Successfully removed user ${userPrincipalName} from group ${groupId}`);
       return {
@@ -301,6 +312,23 @@ var script = {
         removed: false,
         address: baseUrl
       };
+    } else if (removeResponse.status === 400) {
+      // Azure returns 400 when trying to remove a user who is not in the group.
+      // Real Azure error: "removed object references do not exist for the following
+      // modified properties: 'members'"
+      const errorText = await removeResponse.text();
+      if (errorText.includes("modified properties: 'members'")) {
+        console.log(`User ${userPrincipalName} was not a member of group ${groupId}`);
+        return {
+          status: 'success',
+          userPrincipalName,
+          groupId,
+          userId,
+          removed: false,
+          address: baseUrl
+        };
+      }
+      throw new Error(`Failed to remove user from group: ${removeResponse.status} ${removeResponse.statusText} - ${errorText}`);
     } else {
       throw new Error(`Failed to remove user from group: ${removeResponse.status} ${removeResponse.statusText}`);
     }
