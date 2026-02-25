@@ -84,7 +84,7 @@ npm run lint
 npm run build
 
 # Test locally with sample parameters
-npm run dev -- --params '{"userPrincipalName": "user@example.com", "groupId": "12345678-1234-1234-1234-123456789abc"}'
+npm run dev -- --params '{"userPrincipalName": "user@example.com", "groupId": "12345678-1234-1234-1234-123456789abc"}' --secrets '{"OAUTH2_CLIENT_CREDENTIALS_CLIENT_SECRET":"xxx","OAUTH2_CLIENT_CREDENTIALS_CLIENT_ID":"xxx","OAUTH2_CLIENT_CREDENTIALS_TOKEN_URL":"xxx","OAUTH2_CLIENT_CREDENTIALS_SCOPE":"https://graph.microsoft.com/.default"}'
 ```
 
 ## Usage Examples
