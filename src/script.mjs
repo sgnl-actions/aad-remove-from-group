@@ -37,10 +37,13 @@ async function getUser(userPrincipalName, baseUrl, headers) {
  */
 async function isUserInGroup(userPrincipalName, groupId, baseUrl, headers) {
   const encodedUPN = encodeURIComponent(userPrincipalName);
-  const encodedGroupId = encodeURIComponent(groupId);
-  const url = `${baseUrl}/v1.0/users/${encodedUPN}/memberOf?$filter=id eq '${encodedGroupId}'`;
 
-  const response = await fetch(url, {
+  // Construct URL with proper encoding of the $filter parameter
+  const baseURL = `${baseUrl}/v1.0/users/${encodedUPN}/memberOf`;
+  const url = new URL(baseURL);
+  url.searchParams.set('$filter', `id eq '${groupId}'`);
+
+  const response = await fetch(url.toString(), {
     method: 'GET',
     headers
   });
