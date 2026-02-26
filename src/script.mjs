@@ -28,6 +28,35 @@ async function getUser(userPrincipalName, baseUrl, headers) {
 }
 
 /**
+ * Helper function to check if user is already a member of the group
+ * @param {string} userPrincipalName - User Principal Name (UPN) of the user
+ * @param {string} groupId - Azure AD Group ID (GUID)
+ * @param {string} baseUrl - Azure AD base URL
+ * @param {Object} headers - Request headers with Authorization
+ * @returns {Promise<boolean>} - True if user is a member, false otherwise
+ */
+async function isUserInGroup(userPrincipalName, groupId, baseUrl, headers) {
+  const encodedUPN = encodeURIComponent(userPrincipalName);
+
+  // Construct URL with proper encoding of the $filter parameter
+  const baseURL = `${baseUrl}/v1.0/users/${encodedUPN}/memberOf`;
+  const url = new URL(baseURL);
+  url.searchParams.set('$filter', `id eq '${groupId}'`);
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to check group membership: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.value && data.value.length > 0;
+}
+
+/**
  * Helper function to remove a user from a group
  * @param {string} groupId - Azure AD Group ID
  * @param {string} userId - User's directory object ID
@@ -72,58 +101,82 @@ export default {
   invoke: async (params, context) => {
     console.log('Starting Azure AD remove user from group action');
 
+    const { userPrincipalName, groupId } = params;
+
+    if (!userPrincipalName || typeof userPrincipalName !== 'string' || !userPrincipalName.trim()) {
+      throw new Error('userPrincipalName parameter is required and cannot be empty');
+    }
+
+    if (!groupId || typeof groupId !== 'string' || !groupId.trim()) {
+      throw new Error('groupId parameter is required and cannot be empty');
+    }
+
     // Get base URL and authentication headers using utilities
     const baseUrl = getBaseURL(params, context);
     const headers = await createAuthHeaders(context);
 
-    const { userPrincipalName, groupId } = params;
+    console.log(`Processing removal of user ${userPrincipalName} from group ${groupId}`);
 
-    console.log(`Removing user ${userPrincipalName} from group ${groupId}`);
-
-    // Step 1: Get user's directory object ID
-    console.log(`Step 1: Getting user directory object ID for ${userPrincipalName}`);
-    const getUserResponse = await getUser(userPrincipalName, baseUrl, headers);
-
-    if (!getUserResponse.ok) {
-      throw new Error(`Failed to get user ${userPrincipalName}: ${getUserResponse.status} ${getUserResponse.statusText}`);
-    }
-
-    const userData = await getUserResponse.json();
-    const userId = userData.id;
-
-    if (!userId) {
-      throw new Error(`No directory object ID found for user ${userPrincipalName}`);
-    }
-
-    console.log(`Found user directory object ID: ${userId}`);
-
-    // Step 2: Remove user from group
-    console.log(`Step 2: Removing user ${userId} from group ${groupId}`);
-    const removeResponse = await removeUserFromGroup(groupId, userId, baseUrl, headers);
-
-    // Handle success cases: 204 No Content or 404 Not Found (user not in group)
-    if (removeResponse.status === 204) {
-      console.log(`Successfully removed user ${userPrincipalName} from group ${groupId}`);
-      return {
-        status: 'success',
+    try {
+      // Step 1: Check if user is actually a member of the group
+      console.log(`Step 1: Checking if user ${userPrincipalName} is in group ${groupId}`);
+      const isMember = await isUserInGroup(
         userPrincipalName,
         groupId,
-        userId,
-        removed: true,
-        address: baseUrl
-      };
-    } else if (removeResponse.status === 404) {
-      console.log(`User ${userPrincipalName} was not a member of group ${groupId}`);
-      return {
-        status: 'success',
-        userPrincipalName,
-        groupId,
-        userId,
-        removed: false,
-        address: baseUrl
-      };
-    } else {
-      throw new Error(`Failed to remove user from group: ${removeResponse.status} ${removeResponse.statusText}`);
+        baseUrl,
+        headers
+      );
+
+      if (!isMember) {
+        console.log(`User ${userPrincipalName} is not a member of group ${groupId}`);
+        return {
+          status: 'success',
+          userPrincipalName,
+          groupId,
+          removed: false,
+          message: 'User is not a member of the group',
+          address: baseUrl
+        };
+      }
+
+      // Step 2: Get user's directory object ID (needed for removal API)
+      console.log(`Step 2: Getting user directory object ID for ${userPrincipalName}`);
+      const getUserResponse = await getUser(userPrincipalName, baseUrl, headers);
+
+      if (!getUserResponse.ok) {
+        throw new Error(`Failed to get user ${userPrincipalName}: ${getUserResponse.status} ${getUserResponse.statusText}`);
+      }
+
+      const userData = await getUserResponse.json();
+      const userId = userData.id;
+
+      if (!userId) {
+        throw new Error(`No directory object ID found for user ${userPrincipalName}`);
+      }
+
+      console.log(`Found user directory object ID: ${userId}`);
+
+      // Step 3: Remove user from group
+      console.log(`Step 3: Removing user ${userId} from group ${groupId}`);
+      const removeResponse = await removeUserFromGroup(groupId, userId, baseUrl, headers);
+
+      if (removeResponse.status === 204) {
+        console.log(`Successfully removed user ${userPrincipalName} from group ${groupId}`);
+        return {
+          status: 'success',
+          userPrincipalName,
+          groupId,
+          userId,
+          removed: true,
+          address: baseUrl
+        };
+      } else {
+        const errorText = await removeResponse.text();
+        throw new Error(`Failed to remove user from group: ${removeResponse.status} ${removeResponse.statusText} - ${errorText}`);
+      }
+    } catch (error) {
+      console.error(`Error in group membership removal operation: ${error.message}`);
+      throw error;
     }
   },
 
