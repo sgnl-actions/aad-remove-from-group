@@ -50,6 +50,10 @@ outputs:
     type: text
     description: The Azure AD object ID of the user
 
+  message:
+    type: text
+    description: Optional message providing additional context (e.g., when user is not a member)
+
   address:
     type: text
     description: The Azure AD API base URL used

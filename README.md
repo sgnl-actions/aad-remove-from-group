@@ -1,19 +1,27 @@
 # Azure Active Directory Remove User from Group
 
-This action removes a user from a group in Azure Active Directory using Microsoft Graph API. The action uses a two-step process to ensure reliable user identification and removal.
+This action removes a user from a group in Azure Active Directory using Microsoft Graph API. The action is idempotent - it checks if the user is a member before attempting to remove them, ensuring safe repeated executions.
 
 ## Overview
 
 The action performs the following steps:
-1. **Get User**: Retrieves the user's directory object ID using their userPrincipalName (email)
-2. **Remove from Group**: Removes the user from the specified group using their directory object ID
+1. **Check Membership**: Verifies if the user is currently a member of the target group
+2. **Get User**: If the user is a member, retrieves the user's directory object ID using their userPrincipalName (email)
+3. **Remove from Group**: Removes the user from the specified group using their directory object ID
 
-This two-step approach ensures that users are correctly identified even when their userPrincipalName contains special characters that require URL encoding.
+### Idempotent Behavior
+
+The action first checks if the user is a member of the target group:
+- **If user is a member**: Removes the user from the group and returns `removed: true`
+- **If user is not a member**: Returns success without making changes and `removed: false`
+- **Safe for retries**: Can be called multiple times with the same parameters without side effects
+
+This approach ensures that users are correctly identified and prevents unnecessary API calls when the user is not in the group.
 
 ## Prerequisites
 
 - Azure AD application with appropriate permissions:
-  - `User.Read.All` (to look up users)
+  - `User.Read.All` (to look up users and check group membership)
   - `Group.ReadWrite.All` or `GroupMember.ReadWrite.All` (to modify group membership)
 - Valid Azure AD access token
 
@@ -59,9 +67,36 @@ This action supports two OAuth2 authentication methods:
 | `status` | string | Operation result (success, failed, etc.) |
 | `userPrincipalName` | string | User Principal Name that was processed |
 | `groupId` | string | The group ID that was processed |
-| `userId` | string | The Azure AD object ID of the user |
-| `removed` | boolean | Whether the user was actually removed (true) or wasn't a member (false) |
+| `userId` | string | The Azure AD object ID of the user (only included when user was removed) |
+| `removed` | boolean | Whether the user was removed from the group (`true`) or was not a member (`false`) |
+| `message` | string | Optional message providing additional context (included when user is not a member) |
 | `address` | string | The Azure AD API base URL used |
+
+#### Example Outputs
+
+**First execution (user removed)**:
+```json
+{
+  "status": "success",
+  "userPrincipalName": "john.doe@company.com",
+  "groupId": "12345678-1234-1234-1234-123456789012",
+  "userId": "87654321-4321-4321-4321-210987654321",
+  "removed": true,
+  "address": "https://graph.microsoft.com"
+}
+```
+
+**Subsequent execution (user not member)**:
+```json
+{
+  "status": "success",
+  "userPrincipalName": "john.doe@company.com", 
+  "groupId": "12345678-1234-1234-1234-123456789012",
+  "removed": false,
+  "message": "User is not a member of the group",
+  "address": "https://graph.microsoft.com"
+}
+```
 
 ## Development
 
@@ -84,7 +119,7 @@ npm run lint
 npm run build
 
 # Test locally with sample parameters
-npm run dev -- --params '{"userPrincipalName": "user@example.com", "groupId": "12345678-1234-1234-1234-123456789abc"}'
+npm run dev -- --params '{"userPrincipalName": "user@example.com", "groupId": "12345678-1234-1234-1234-123456789abc"}' --secrets '{"OAUTH2_CLIENT_CREDENTIALS_CLIENT_SECRET":"xxx","OAUTH2_CLIENT_CREDENTIALS_CLIENT_ID":"xxx","OAUTH2_CLIENT_CREDENTIALS_TOKEN_URL":"xxx","OAUTH2_CLIENT_CREDENTIALS_SCOPE":"https://graph.microsoft.com/.default"}'
 ```
 
 ## Usage Examples
